@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+[aria-hidden="true"] {
+  pointer-events: none;
+}
+
+
+button:focus,
+[role="button"]:focus {
+  outline: 2px solid #3b82f6;
+}
