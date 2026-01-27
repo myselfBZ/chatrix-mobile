@@ -6,6 +6,23 @@ export const serverApiInstance = axios.create({
 });
 
 
+
+export type LoginResposne = {
+    access_token: string;
+    user: {
+        created_at: string;
+        email: string;
+        id: string;
+        last_seen: string;
+        username: string
+    }
+}
+
+export const createAccessToken = ({ email, password } : { email : string, password: string }) => {
+    return serverApiInstance.post<LoginResposne>('/auth/token', { email, password })
+}
+
+
 export type ConversationWithUser = {
     user_data: { 
         id : string;

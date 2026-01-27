@@ -1,13 +1,14 @@
 import { ChatInput } from '@/components/ChatInput';
 import { MessageBubble } from '@/components/MessageBubble';
 import { TypingIndicator } from '@/components/TypingIndicator';
+import { useAuth } from '@/context/Auth';
 import { useConversations } from '@/hooks/useConversations';
 import { useMessages } from '@/hooks/useMessages';
 import { chatService } from '@/services/ChatService';
 import { formatDate } from '@/utils';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -20,21 +21,42 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams();
+  const { user } = useAuth()
   const { getConversationData } = useConversations();
   const conversationData = getConversationData(id as string);
   const router = useRouter();
   const messages = useMessages(id as string);
   
+  const sendTypingEvent = useCallback((isTyping: boolean) => {
+    if (!id || !user) return;
+    chatService.sendMessage( isTyping ? "TYPING" : "STOPPED_TYPING", {
+      to: id,
+      from: user.id
+    })
+  }, [id, user]);
+
   const flatListRef = useRef<FlatList>(null);
   
   const handleBack = () => {
-      router.back();
+      router.replace('/chat/chat');
   };
   
-  if (!id || !conversationData) {
+  if (!id || !conversationData || !user) {
     return (
       <SafeAreaView className="flex-1 bg-black" edges={['top']}>
-        <View className="flex-1 bg-black" />
+        <View className="flex-1 bg-black">
+          {/* Show the header even when loading/unmounting */}
+          <View className="bg-zinc-950/95 backdrop-blur-xl">
+            <View className="px-5 pb-5 pt-3 flex-row items-center">
+              <Pressable 
+                onPress={handleBack} 
+                className="w-9 h-9 -ml-1.5 items-center justify-center rounded-full"
+              >
+                <Ionicons name="chevron-back" size={26} color="#ffffff" />
+              </Pressable>
+            </View>
+          </View>
+        </View>
       </SafeAreaView>
     );
   }
@@ -135,9 +157,10 @@ export default function ChatScreen() {
           />
           
           <ChatInput 
+            onTyping={sendTypingEvent}
             onSend={(msg) => chatService.sendChatMessage(
               conversationData.user_data.id,
-              "5809d635-d645-408f-adef-0b763bc37c65",
+              user.id,
               msg
             )} 
           />

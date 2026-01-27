@@ -1,11 +1,12 @@
+import { useAuth } from "@/context/Auth";
 import { ChatMessage } from "@/services/api";
 import { formatMessageTime } from "@/utils";
 import { Ionicons } from '@expo/vector-icons';
 import { Text, View } from "react-native";
 
 export function MessageBubble({ item }: { item: ChatMessage }) {
-  // A BIG TODO
-  const isMe = item.sender_id === "5809d635-d645-408f-adef-0b763bc37c65";
+  const { user } = useAuth()
+  const isMe = item.sender_id === user?.id
   const isPending = item.clientSide?.state === "pending";
 
   return (

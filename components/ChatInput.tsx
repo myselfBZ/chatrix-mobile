@@ -1,3 +1,4 @@
+import { useTyping } from '@/hooks/useTyping';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -10,12 +11,20 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-export function ChatInput({ onSend }: { onSend: (msg: string) => void }) {
+export function ChatInput({ 
+  onSend,
+  onTyping
+}: { 
+  onSend: (msg: string) => void;
+  onTyping: (isTyping: boolean) => void;
+}) {
   const [message, setMessage] = useState('');
   const insets = useSafeAreaInsets();
   
   const slideAnim = useRef(new Animated.Value(100)).current;
   const sendButtonScale = useRef(new Animated.Value(1)).current;
+
+  useTyping(message, onTyping)
 
   useEffect(() => {
     // Slide up animation on mount

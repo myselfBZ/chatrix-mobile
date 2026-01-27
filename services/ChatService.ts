@@ -35,7 +35,7 @@ type MessageTypes = {
 class ChatService {
     private ws: WebSocket | null = null;
     private token : string | null = null;
-    
+    private user_id = "";
     private conversations: ConversationWithUser[] = [];
     // Conversations listener
     private conversationListener: ((data: ConversationWithUser[]) => void) | null = null;
@@ -47,8 +47,9 @@ class ChatService {
     private statusListener: ((connected: boolean) => void) | null = null;
     connected = false;
 
-    start(url: string, token: string) {
+    start(url: string, token: string, user_id: string) {
         const ws = new WebSocket(url);
+        this.user_id = user_id
         this.token = token
         this.ws = ws;
 
@@ -117,7 +118,6 @@ class ChatService {
                         v.is_online = false
                         v.user_data.last_seen = m.message.last_seen
                         v.is_typing = false
-                        return v
                     }
                     return v 
                 })
@@ -223,7 +223,7 @@ class ChatService {
         if(!partner) return;
         const msgs = this.messages[user_id] || []
         const readMsgs = msgs.map((v) => {
-            if(!v.is_read && v.sender_id !== "5809d635-d645-408f-adef-0b763bc37c65") {
+            if(!v.is_read && v.sender_id !== this.user_id) {
                 v.is_read = true
                 return v
             }
@@ -265,7 +265,7 @@ class ChatService {
             // TODO: create a new conversation
             if(this.messages[to]) {
                 this.messages[to].push({
-                    sender_id: "5809d635-d645-408f-adef-0b763bc37c65",
+                    sender_id: this.user_id,
                     content: content,
                     id: "",
                     is_read: false,

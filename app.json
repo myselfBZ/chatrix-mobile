@@ -20,12 +20,13 @@
       },
       "softwareKeyboardLayoutMode": "adjustResize",
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.myselfbz.chatrixmobile"
     },
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png",
-      "bundler":"metro"
+      "bundler": "metro"
     },
     "plugins": [
       "expo-router",
@@ -45,6 +46,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "b69db8dd-1cf2-4180-9fed-fc857ffaf4c9"
+      }
+    },
+    "owner": "myselfbz"
   }
 }
