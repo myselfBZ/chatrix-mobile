@@ -37,6 +37,7 @@ class ChatService {
     private token : string | null = null;
     private user_id = "";
     private conversations: ConversationWithUser[] = [];
+    private activeChatId = "";
     // Conversations listener
     private conversationListener: ((data: ConversationWithUser[]) => void) | null = null;
     
@@ -85,8 +86,7 @@ class ChatService {
                 const currentMsgs : ChatMessage[] = this.messages[m.message.from] ? (this.messages[m.message.from]) : ([])
                 const newMsg = {
                     sender_id: m.message.from,
-                    // TODO
-                    is_read: true,
+                    is_read: false,
                     created_at: m.message.created_at,
                     content: m.message.content,
                     id: m.message.id,
@@ -95,6 +95,18 @@ class ChatService {
                 }
                 const newMsgs = [...currentMsgs, newMsg]
                 this.messages[m.message.from] = newMsgs
+
+                // A BIG TODO.
+                // EVERY NEW MESSAGE MIGHT BE A NEW RENDER OF THE CONVERSATIONS ARRAY
+                if(this.activeChatId !== newMsg.sender_id) {
+                    this.updateConversations(this.conversations.map((v) => {
+                        if(v.user_data.id === newMsg.sender_id) {
+                            v.user_data.unread_msg_count++
+                        }
+                        return v
+                    }))
+                }
+
                 this.notifyMessages(newMsgs)
                 break;
             case "ACK_MSG_DELIVERED":
@@ -215,12 +227,31 @@ class ChatService {
         this.conversationListener(this.conversations)
     }
 
+    private updateConversations(c: ConversationWithUser[]) {
+        this.conversations = c
+        this.notifConversations()
+    }
+
+    setActiveChatId(id: string) {
+        this.activeChatId = id
+    }
+
     markMsgsReadForConvo(user_id: string) {
         const partner = this.conversations.find((v) => {
             return v.user_data.id === user_id
         })
 
         if(!partner) return;
+
+        const conversations = this.conversations.map((v) => {
+            if(v.user_data.id === user_id) {
+                v.user_data.unread_msg_count = 0
+            }
+            return v
+        })
+        
+        this.updateConversations(conversations)
+
         const msgs = this.messages[user_id] || []
         const readMsgs = msgs.map((v) => {
             if(!v.is_read && v.sender_id !== this.user_id) {
@@ -299,6 +330,7 @@ class ChatService {
         this.statusListener = callback;
         callback(this.connected);
     }
+
 
     disconnect() {
         this.ws?.close();

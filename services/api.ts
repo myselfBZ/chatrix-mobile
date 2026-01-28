@@ -29,6 +29,7 @@ export type ConversationWithUser = {
         last_seen: string;
         username: string;
         conversation_id: string
+        unread_msg_count: number;
     };
     is_online: boolean;
     // client side

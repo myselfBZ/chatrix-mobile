@@ -8,7 +8,7 @@ import { chatService } from '@/services/ChatService';
 import { formatDate } from '@/utils';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -34,6 +34,15 @@ export default function ChatScreen() {
       from: user.id
     })
   }, [id, user]);
+
+  useEffect(() => {
+    if(Array.isArray(id)) {
+      // TODO
+      return
+    }
+
+    chatService.setActiveChatId(id)
+  }, [])
 
   const flatListRef = useRef<FlatList>(null);
   
