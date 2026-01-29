@@ -1,5 +1,5 @@
 import * as Crypto from 'expo-crypto';
-import { ChatMessage, ConversationWithUser, getConversations, getMessageHistory } from "./api";
+import { ChatMessage, ConversationWithUser, createConversation, getConversations, getMessageHistory } from "./api";
 type MessageTypes = {
         type: "WELCOME",
         message: {}
@@ -30,13 +30,16 @@ type MessageTypes = {
         to: string;
       } 
     }
+    | { type: "CONVO_CREATED", message: ConversationWithUser }
+
 
 
 class ChatService {
     private ws: WebSocket | null = null;
     private token : string | null = null;
     private user_id = "";
-    private conversations: ConversationWithUser[] = [];
+    // key: string -> partner id
+    private conversations: Map<string, ConversationWithUser> = new Map();
     private activeChatId = "";
     // Conversations listener
     private conversationListener: ((data: ConversationWithUser[]) => void) | null = null;
@@ -99,12 +102,11 @@ class ChatService {
                 // A BIG TODO.
                 // EVERY NEW MESSAGE MIGHT BE A NEW RENDER OF THE CONVERSATIONS ARRAY
                 if(this.activeChatId !== newMsg.sender_id) {
-                    this.updateConversations(this.conversations.map((v) => {
-                        if(v.user_data.id === newMsg.sender_id) {
-                            v.user_data.unread_msg_count++
-                        }
-                        return v
-                    }))
+                    const conversation = this.conversations.get(newMsg.sender_id)
+                    if(conversation) {
+                        conversation.user_data.unread_msg_count++
+                        this.updateConversation(conversation.user_data.id, {...conversation})
+                    }
                 }
 
                 this.notifyMessages(newMsgs)
@@ -124,31 +126,18 @@ class ChatService {
                     this.notifyMessages(newMsgs)
                 }
                 break;
+
             case "OFFLINE_STATUS":
-                const newConversations = this.conversations.map((v) => {
-                    if(v.user_data.id === m.message.user_id) {
-                        v.is_online = false
-                        v.user_data.last_seen = m.message.last_seen
-                        v.is_typing = false
-                    }
-                    return v 
-                })
-                this.conversations = newConversations
-                this.notifConversations()
-                break
             case "ONLINE_PRESENCE":
-                const newConvos = this.conversations.map((v) => {
-                    if(v.user_data.id === m.message.user_id) {
-                        v.is_online = true
-                        return v
-                    }
-                    return v 
-                })
-                this.conversations = newConvos
-                this.notifConversations()
+                const oldConversation = this.conversations.get(m.message.user_id)
+                if(oldConversation) {
+                    oldConversation.is_online = m.type === "ONLINE_PRESENCE"
+                    this.updateConversation(oldConversation.user_data.id, oldConversation)
+                }
                 break;
+
             case "MSG_READ":
-                const partner = this.conversations.find((v) => m.message.conversation_id === v.user_data.conversation_id)
+                const partner = this.getUserByConversationId(m.message.conversation_id)
                 if(!partner) return;
                 const conversation = this.messages[partner.user_data.id]
                 if(!conversation) return;
@@ -165,22 +154,28 @@ class ChatService {
                 break;
             case "TYPING":
             case "STOPPED_TYPING":
-                const newConv = this.conversations.map((v) => {
-                    if(v.user_data.id === m.message.from) {
-                        v.is_typing = m.type === "TYPING" ? (true) : (false)
-                    }
-                    return v
-                })
-                this.conversations = newConv
-                this.notifConversations()
+                const stoppedTypingConv = this.conversations.get(m.message.from)
+                if(stoppedTypingConv) {
+                    stoppedTypingConv.is_typing = m.type === "TYPING"
+                    this.updateConversation(stoppedTypingConv.user_data.id, stoppedTypingConv)
+                }
                 break
+            case "CONVO_CREATED":
+                this.updateConversation(m.message.user_data.id, m.message)
         }
     }
 
     loadMessageHistory = async (partner_id: string) => {
         if(!this.token) return []; // Return empty array instead of nothing
         
-        if(this.messages[partner_id]) {
+        const partner = this.conversations.get(partner_id)
+
+        if(!partner) {
+            // WE'll deal with that later
+            return [];
+        }
+
+        if(partner.msg_history_loaded) {
             // Still notify other listeners, but return the data for the caller
             this.notifyMessages(this.messages[partner_id]);
             return this.messages[partner_id]; 
@@ -193,6 +188,10 @@ class ChatService {
             });
             this.messages[partner_id] = resp.data || [];
             this.notifyMessages(this.messages[partner_id]);
+            
+            partner.msg_history_loaded = true
+            this.updateConversation(partner_id, partner)
+            
             return resp.data ? resp.data : []
         } catch(e: any) {
             console.log("Error fetching history:", partner_id);
@@ -205,10 +204,13 @@ class ChatService {
 
         try {
             const resp = await getConversations({ token: this.token })
-            this.conversations = resp.data;
-            if(this.conversationListener) {
-                this.conversationListener(this.conversations);
+            
+            for(const conversation of resp.data) {
+                conversation.msg_history_loaded = false
+                this.conversations.set(conversation.user_data.id, conversation)
             }
+
+            this.notifConversations()
         } catch (e) {
             // TODO
             console.log("syncConversations() error:", e);
@@ -224,33 +226,38 @@ class ChatService {
     // Conversations
     private notifConversations() {
         if(this.conversationListener)
-        this.conversationListener(this.conversations)
+        this.conversationListener(Array.from(this.conversations.values()))
     }
 
-    private updateConversations(c: ConversationWithUser[]) {
-        this.conversations = c
+    private updateConversation(user_id: string, conversation: ConversationWithUser) {
+        this.conversations.set(user_id, conversation)
         this.notifConversations()
     }
 
+    private getUserByConversationId(conversation_id: string) {
+        for(const conv of this.conversations.values()) {
+            if(conv.user_data.conversation_id === conversation_id) return conv;
+        }
+        return null
+    }
+
+
     setActiveChatId(id: string) {
         this.activeChatId = id
+
+        return () => {
+            this.activeChatId = ""
+        }
     }
 
     markMsgsReadForConvo(user_id: string) {
-        const partner = this.conversations.find((v) => {
-            return v.user_data.id === user_id
-        })
+        const partner = this.conversations.get(user_id)
 
         if(!partner) return;
 
-        const conversations = this.conversations.map((v) => {
-            if(v.user_data.id === user_id) {
-                v.user_data.unread_msg_count = 0
-            }
-            return v
-        })
-        
-        this.updateConversations(conversations)
+        partner.user_data.unread_msg_count = 0;
+
+        this.updateConversation(user_id, partner)
 
         const msgs = this.messages[user_id] || []
         const readMsgs = msgs.map((v) => {
@@ -279,9 +286,29 @@ class ChatService {
     subscribeConversations(callback: (data: ConversationWithUser[]) => void) {
         this.conversationListener = callback;
 
-        callback(this.conversations);
+        callback(Array.from(this.conversations.values()));
 
         return () => { this.conversationListener = null };
+    }
+
+    async createConversation(convo: ConversationWithUser) {
+        if(!this.token) return;
+
+        const resp = await createConversation({
+            user1: this.user_id,
+            user2: convo.user_data.id,
+            token: this.token
+        })
+
+        this.updateConversation(convo.user_data.id, { 
+            is_online: convo.is_online,
+            is_typing: false,
+            msg_history_loaded: true,
+            user_data: {
+                ...convo.user_data,
+                conversation_id: resp.data.id
+            }}
+        )
     }
 
     sendChatMessage(to: string, from: string, content: string) {
@@ -293,7 +320,6 @@ class ChatService {
                 content,
                 temp_id
             } });
-            // TODO: create a new conversation
             if(this.messages[to]) {
                 this.messages[to].push({
                     sender_id: this.user_id,
@@ -307,8 +333,21 @@ class ChatService {
                         state: "pending"
                     }
                 })
-                this.notifyMessages([...this.messages[to]])
+            } else {
+                this.messages[to] = [{
+                    sender_id: this.user_id,
+                    content: content,
+                    id: "",
+                    is_read: false,
+                    conversation_id: "",
+                    created_at: "",
+                    clientSide: {
+                        temp_id: temp_id,
+                        state: "pending"
+                    }
+                }]
             }
+            this.notifyMessages([...this.messages[to]])
 
             this.ws.send(data);
         } else {

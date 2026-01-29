@@ -6,6 +6,19 @@ export const serverApiInstance = axios.create({
 });
 
 
+export type SearchUserResult = {
+    username: string;
+    id: string;
+    last_seen: string;
+    is_online: boolean;
+}
+
+export type CreateConversationResponse = {
+    user1: string;
+    user2 : string;
+    id: string;
+}
+
 
 export type LoginResposne = {
     access_token: string;
@@ -34,6 +47,7 @@ export type ConversationWithUser = {
     is_online: boolean;
     // client side
     is_typing?: boolean
+    msg_history_loaded?: boolean;
 }
 
 export type ChatMessage = {
@@ -63,6 +77,29 @@ export const getMessageHistory = ({ token, with_id } : {token: string, with_id:s
     return serverApiInstance.get<ChatMessage[]>(`authenticated/messages?with_id=${with_id}`, {
         headers: {
             'Authorization': `Bearer ${token}`
+        }
+    })
+}
+
+export const searchUser = ({ token, query } : {
+    token: string;
+    query: string;
+}) => {
+    return serverApiInstance.post<SearchUserResult[]>('/authenticated/users/search', { query } ,{
+        headers: {
+            'Authorization': `Bearer ${token}`
+        },
+    })
+}
+
+export const createConversation = ({ token, user1, user2 } : {
+    token: string;
+    user1: string;
+    user2: string;
+}) => {
+    return serverApiInstance.post<CreateConversationResponse>('/authenticated/conversations', { user1, user2 }, {
+        headers: {
+            "Authorization": `Bearer ${token}`
         }
     })
 }

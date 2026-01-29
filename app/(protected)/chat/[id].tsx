@@ -4,6 +4,8 @@ import { TypingIndicator } from '@/components/TypingIndicator';
 import { useAuth } from '@/context/Auth';
 import { useConversations } from '@/hooks/useConversations';
 import { useMessages } from '@/hooks/useMessages';
+import { useSearchedUser } from '@/hooks/useSearchedUser';
+import { ConversationWithUser } from '@/services/api';
 import { chatService } from '@/services/ChatService';
 import { formatDate } from '@/utils';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,10 +22,28 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ChatScreen() {
-  const { id } = useLocalSearchParams();
-  const { user } = useAuth()
+  const { id, isNew } = useLocalSearchParams();
+  const {getSearchedUser} = useSearchedUser();
+  const { user, token } = useAuth()
   const { getConversationData } = useConversations();
-  const conversationData = getConversationData(id as string);
+  let conversationData : ConversationWithUser | undefined;
+  
+  if(isNew === "true") {
+    const searchedUser = getSearchedUser()
+    conversationData = {
+      is_online: searchedUser!.is_online,
+      user_data: {
+        id: searchedUser!.id,
+        conversation_id: "",
+        last_seen: searchedUser!.last_seen,
+        username: searchedUser!.username,
+        unread_msg_count: 0
+      }
+    }
+  } else {
+    conversationData = getConversationData(id as string)
+  }
+
   const router = useRouter();
   const messages = useMessages(id as string);
   
@@ -41,7 +61,9 @@ export default function ChatScreen() {
       return
     }
 
-    chatService.setActiveChatId(id)
+    const unset = chatService.setActiveChatId(id)
+
+    return () => unset();
   }, [])
 
   const flatListRef = useRef<FlatList>(null);
@@ -49,6 +71,21 @@ export default function ChatScreen() {
   const handleBack = () => {
       router.replace('/chat/chat');
   };
+
+  const handleSendMsg = async (msg: string) => {
+    if(!user || !conversationData || !token) return;
+
+    // gotta create a conversation in the database
+    if(isNew === 'true' && messages.length === 0) {
+      await chatService.createConversation(conversationData)
+    }
+
+    chatService.sendChatMessage(
+      conversationData.user_data.id,
+      user.id,
+      msg
+    )
+  }
   
   if (!id || !conversationData || !user) {
     return (
@@ -167,11 +204,7 @@ export default function ChatScreen() {
           
           <ChatInput 
             onTyping={sendTypingEvent}
-            onSend={(msg) => chatService.sendChatMessage(
-              conversationData.user_data.id,
-              user.id,
-              msg
-            )} 
+            onSend={handleSendMsg} 
           />
         </KeyboardAvoidingView>
     </SafeAreaView>
